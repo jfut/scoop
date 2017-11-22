@@ -1,0 +1,57 @@
+{
+    "version": "1.0.0",
+    "url": [
+        "http://test1.example.org/file.zip",
+        {
+            "address": "http://test2.example.org/file.zip",
+            "request": {
+                "crediential": {
+                    "username": "user2",
+                    "password": "pass2"
+                }
+            }
+        },
+        {
+            "address": "http://test3.example.org/file.zip",
+            "request": {
+                "useragent": "UserAgent3 (Scoop/1.0)"
+            }
+        },
+        {
+            "address": "http://test4.example.org/file.zip",
+            "request": {
+                "useragent": "",
+                "referer": "http://test4.example.org/file.html",
+                "crediential": {
+                    "username": "$Env:TEST_USERNAME",
+                    "password": "$Env:TEST_PASSWORD"
+                },
+                "header": {
+                    "X-Header1": "header1",
+                    "X-Header2": "header2"
+                },
+                "cookie": {
+                    "oraclelicense": "specified-value"
+                }
+            }
+        }
+    ],
+    "request": {
+        "useragent": "Common UserAgent (Scoop/1.0)"
+    },
+    "cookie": {
+        "oraclelicense": "accept-securebackup-cookie"
+    },
+    "checkver": {
+        "url": {
+            "address": "http://checkver.example.org/release",
+            "request": {
+                "crediential": {
+                    "username": "checkver_user",
+                    "password": "$Env:TEST_CHECKVER_PASSWORD"
+                }
+            }
+        },
+        "re": "/releases/tag/v([\\d.]+)"
+    }
+}

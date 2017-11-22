@@ -45,8 +45,12 @@ describe "manifest-validation" {
 
     context "manifest validates against the schema" {
         beforeall {
+            $working_dir = setup_working "manifest"
             $bucketdir = "$psscriptroot\..\bucket\"
-            $manifest_files = gci $bucketdir *.json
+            # TODO: y*.json -> *.json
+            $manifest_files = gci $bucketdir y*.json
+            $manifest_files += gci "$working_dir/url_with_request.json"
+            $manifest_files += gci "$working_dir/url_with_request_architecture.json"
             $validator = new-object Scoop.Validator($schema, $true)
         }
 

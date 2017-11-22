@@ -47,10 +47,6 @@ $original = use_any_https_protocol
 
 # start all downloads
 $queue | % {
-    $wc = new-object net.webclient
-    $wc.Headers.Add("user-agent", "Scoop/1.0 (+http://scoop.sh/) (Windows NT 6.1; WOW64)")
-    register-objectevent $wc downloadstringcompleted -ea stop | out-null
-
     $name, $json = $_
 
     $githubRegex = "\/releases\/tag\/(?:v)?([\d.]+)"
@@ -94,9 +90,11 @@ $queue | % {
 
     $reverse = $json.checkver.reverse -and $json.checkver.reverse -eq "true"
 
+    $url = url_with_request $url $json.request
+
     $state = new-object psobject @{
         app = (strip_ext $name);
-        url = $url;
+        url = $url.address;
         regex = $regex;
         json = $json;
         jsonpath = $jsonpath;
@@ -104,8 +102,9 @@ $queue | % {
         replace = $replace;
     }
 
-    $wc.headers.add('Referer', (strip_filename $url))
-    $wc.downloadstringasync($url, $state)
+    $wc = create_webclient $url
+    register-objectevent $wc downloadstringcompleted -ea stop | out-null
+    $wc.downloadstringasync($url.address, $state)
 }
 
 # wait for all to complete

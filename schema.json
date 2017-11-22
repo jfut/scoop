@@ -195,8 +195,15 @@
                             "type": "string"
                         },
                         "url": {
-                            "format": "uri",
-                            "type": "string"
+                            "oneOf": [
+                                {
+                                    "format": "uri",
+                                    "type": "string"
+                                },
+                                {
+                                    "$ref": "#/definitions/uriItem"
+                                }
+                            ]
                         },
                         "jp": {
                             "pattern": "^\\$\\..*$",
@@ -233,6 +240,52 @@
                 },
                 "keep": {
                     "type": "string"
+                }
+            },
+            "type": "object"
+        },
+        "uriItem": {
+            "additionalProperties": false,
+            "properties": {
+                "address": {
+                    "type": "string",
+                    "format": "uri",
+                    "not": {
+                        "pattern": "(\\$)"
+                    }
+                },
+                "request": {
+                    "$ref": "#/definitions/request"
+                }
+            },
+            "type": "object"
+        },
+        "request": {
+            "additionalProperties": false,
+            "properties": {
+                "useragent": {
+                    "type": "string"
+                },
+                "referer": {
+                    "type": "string"
+                },
+                "crediential": {
+                    "additionalProperties": false,
+                    "properties": {
+                        "username": {
+                            "type": "string"
+                        },
+                        "password": {
+                            "type": "string"
+                        }
+                    },
+                    "type": "object"
+                },
+                "header": {
+                    "type": "object"
+                },
+                "cookie": {
+                    "type": "object"
                 }
             },
             "type": "object"
@@ -302,11 +355,18 @@
                 },
                 {
                     "items": {
-                        "format": "uri",
-                        "not": {
-                            "pattern": "(\\$)"
-                        },
-                        "type": "string"
+                        "anyOf": [
+                            {
+                                "format": "uri",
+                                "not": {
+                                    "pattern": "(\\$)"
+                                },
+                                "type": "string"
+                            },
+                            {
+                                "$ref": "#/definitions/uriItem"
+                            }
+                        ]
                     },
                     "minItems": 1,
                     "type": "array",
@@ -410,6 +470,9 @@
                 }
             },
             "type": "object"
+        },
+        "request": {
+            "$ref": "#/definitions/request"
         },
         "shortcuts": {
             "$ref": "#/definitions/arrayOfArrayOfStrings"

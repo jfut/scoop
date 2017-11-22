@@ -1,10 +1,177 @@
 . "$psscriptroot\..\lib\core.ps1"
+. "$psscriptroot\..\lib\manifest.ps1"
 . "$psscriptroot\..\lib\install.ps1"
 . "$psscriptroot\..\lib\unix.ps1"
 . "$psscriptroot\Scoop-TestLib.ps1"
 
 $repo_dir = (Get-Item $MyInvocation.MyCommand.Path).directory.parent.FullName
 $isUnix = is_unix
+
+describe "url_with_request" {
+    it "string url" {
+        $url = "http://test1.example.org/file.zip"
+        $url = url_with_request $url $null
+        $url.address | should be "http://test1.example.org/file.zip"
+        $url.request | should be $null
+
+        $url = "http://test1.example.org/file.zip"
+        $default_request = [PSCustomObject]@{
+            "useragent" = "UserAgent";
+        }
+        $url = url_with_request $url $default_request
+        $url.address | should be "http://test1.example.org/file.zip"
+        $url.request.useragent | should be "UserAgent"
+    }
+
+    it "pscustomobject url" {
+        $request = [PSCustomObject]@{
+            "useragent" = "UserAgent";
+        }
+        $url = [PSCustomObject]@{
+            "address" = "http://test1.example.org/file.zip";
+            "request" = $request;
+        }
+        $url = url_with_request $url $null
+        $url.address | should be "http://test1.example.org/file.zip"
+        $url.request.useragent | should be "UserAgent"
+
+        $url = [PSCustomObject]@{
+            "address" = "http://test1.example.org/file.zip";
+            "request" = $request;
+        }
+        $default_request = [PSCustomObject]@{
+            "useragent" = "DefaultUserAgent";
+        }
+        $url = url_with_request $url $default_request
+        $url.address | should be "http://test1.example.org/file.zip"
+        $url.request.useragent | should be "UserAgent"
+    }
+}
+
+describe "urls_with_request" {
+    beforeall {
+        $working_dir = setup_working "manifest"
+    }
+
+    it "urls_with_request without architecture" {
+        $manifest = parse_json "$working_dir/url_with_request.json"
+        $urls = urls_with_request $manifest $null
+
+        $urls[0].address | should be "http://test1.example.org/file.zip"
+        $urls[1].address | should be "http://test2.example.org/file.zip"
+        $urls[2].address | should be "http://test3.example.org/file.zip"
+        $urls[3].address | should be "http://test4.example.org/file.zip"
+
+        $urls[0].request.useragent | should be "Common UserAgent (Scoop/1.0)"
+        $urls[1].request.useragent | should be $null
+        $urls[2].request.useragent | should be "UserAgent3 (Scoop/1.0)"
+        $urls[3].request.useragent | should be ""
+
+        $urls[0].request.referer | should be $null
+        $urls[1].request.referer | should be $null
+        $urls[2].request.referer | should be $null
+        $urls[3].request.referer | should be "http://test4.example.org/file.html"
+    }
+
+    it "urls_with_request with architecture" {
+        $manifest = parse_json "$working_dir/url_with_request_architecture.json"
+
+        $urls = urls_with_request $manifest "64bit"
+        $urls[0].address | should be "http://test1.example.org/file.zip"
+        $urls[1].address | should be "http://test2.example.org/file.zip"
+        $urls[0].request.useragent | should be "Common UserAgent (Scoop/1.0)"
+        $urls[1].request.useragent | should be $null
+        $urls[0].request.referer | should be $null
+        $urls[1].request.referer | should be $null
+
+        $urls = urls_with_request $manifest "32bit"
+        $urls[0].address | should be "http://test3.example.org/file.zip"
+        $urls[1].address | should be "http://test4.example.org/file.zip"
+        $urls[0].request.useragent | should be "UserAgent3 (Scoop/1.0)"
+        $urls[1].request.useragent | should be ""
+        $urls[0].request.referer | should be $null
+        $urls[1].request.referer | should be "http://test4.example.org/file.html"
+    }
+}
+
+describe "create_webclient" {
+    beforeall {
+        $working_dir = setup_working "manifest"
+    }
+
+    it "create_webclient" {
+        $manifest = parse_json "$working_dir/url_with_request.json"
+        $url = url_with_request $manifest.checkver.url $manifest.request
+
+        $env:TEST_CHECKVER_PASSWORD = "password1"
+        $wc = create_webclient $url
+        $wc.credentials.userName | should be "checkver_user"
+        $wc.credentials.password | should be "password1"
+        $wc.headers.count | should be 2
+        $wc.headers['Referer']  | should be "http://checkver.example.org/"
+        $wc.headers['User-Agent'] | should be "Scoop/1.0 (+http://scoop.sh/) (Windows NT 6.1; WOW64)"
+
+        $env:TEST_CHECKVER_PASSWORD = "password2"
+        $wc = create_webclient $url
+        $wc.credentials.userName | should be "checkver_user"
+        $wc.credentials.password | should be "password2"
+    }
+}
+
+describe "create_webrequest" {
+    beforeall {
+        $working_dir = setup_working "manifest"
+    }
+
+    it "create_webrequest without architecture" {
+        $manifest = parse_json "$working_dir/url_with_request.json"
+        $urls = urls_with_request $manifest $null
+
+        $wreq = create_webrequest $urls[0] $manifest.cookie
+        $wreq.address | should be "http://test1.example.org/file.zip"
+        $wreq.credentials | should be $null
+        $wreq.headers.count | should be 3
+        $wreq.headers['Cookie'] | should be "oraclelicense=accept-securebackup-cookie"
+        $wreq.referer | should be "http://test1.example.org/"
+        $wreq.useragent | should be "Common UserAgent (Scoop/1.0)"
+
+        $wreq = create_webrequest $urls[1] $manifest.cookie
+        $wreq.address | should be "http://test2.example.org/file.zip"
+        $wreq.credentials.userName | should be "user2"
+        $wreq.credentials.password | should be "pass2"
+        $wreq.headers.count | should be 3
+        $wreq.headers['Cookie'] | should be "oraclelicense=accept-securebackup-cookie"
+        $wreq.referer | should be "http://test2.example.org/"
+        $wreq.useragent | should be "Scoop/1.0"
+
+        $wreq = create_webrequest $urls[2] $manifest.cookie
+        $wreq.address | should be "http://test3.example.org/file.zip"
+        $wreq.credentials | should be $null
+        $wreq.headers.count | should be 3
+        $wreq.headers['Cookie'] | should be "oraclelicense=accept-securebackup-cookie"
+        $wreq.referer | should be "http://test3.example.org/"
+        $wreq.useragent | should be "UserAgent3 (Scoop/1.0)"
+
+        $env:TEST_USERNAME = "username1"
+        $env:TEST_PASSWORD = "password1"
+        $wreq = create_webrequest $urls[3] $manifest.cookie
+        $wreq.address | should be "http://test4.example.org/file.zip"
+        $wreq.credentials.userName | should be "username1"
+        $wreq.credentials.password | should be "password1"
+        $wreq.headers.count | should be 4
+        $wreq.headers['X-Header1'] | should be "header1"
+        $wreq.headers['X-Header2'] | should be "header2"
+        $wreq.headers['Cookie'] | should be "oraclelicense=specified-value"
+        $wreq.referer | should be "http://test4.example.org/file.html"
+        $wreq.useragent | should be $null
+
+        $env:TEST_USERNAME = "username2"
+        $env:TEST_PASSWORD = "password2"
+        $wreq = create_webrequest $urls[3] $manifest.cookie
+        $wreq.credentials.userName | should be "username2"
+        $wreq.credentials.password | should be "password2"
+    }
+}
 
 describe "is_directory" {
     beforeall {

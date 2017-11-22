@@ -1,0 +1,33 @@
+{
+    "version": "1.0.0",
+    "architecture": {
+        "64bit": {
+            "url": [
+                "http://test1.example.org/file.zip",
+                {
+                    "address": "http://test2.example.org/file.zip"
+                }
+            ]
+        },
+        "32bit": {
+            "url": [
+                {
+                    "address": "http://test3.example.org/file.zip",
+                    "request": {
+                        "useragent": "UserAgent3 (Scoop/1.0)"
+                    }
+                },
+                {
+                    "address": "http://test4.example.org/file.zip",
+                    "request": {
+                        "useragent": "",
+                        "referer": "http://test4.example.org/file.html"
+                    }
+                }
+            ]
+        }
+    },
+    "request": {
+        "useragent": "Common UserAgent (Scoop/1.0)"
+    }
+}

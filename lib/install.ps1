@@ -35,7 +35,6 @@ function install_app($app, $architecture, $global, $suggested, $use_cache = $tru
     $dir = ensure (versiondir $app $version $global)
     $original_dir = $dir # keep reference to real (not linked) directory
     $persist_dir = persistdir $app $global
-
     $fname = dl_urls $app $version $manifest $architecture $dir $use_cache $check_hash
     unpack_inno $fname $manifest $dir
     pre_install $manifest $architecture
@@ -96,13 +95,13 @@ function locate($app, $bucket) {
 }
 
 function dl_with_cache($app, $version, $url, $to, $cookies = $null, $use_cache = $true) {
-    $cached = fullpath (cache_path $app $version $url)
+    $cached = fullpath (cache_path $app $version $url.address)
 
     if(!(test-path $cached) -or !$use_cache) {
         $null = ensure $cachedir
         do_dl $url "$cached.download" $cookies
         Move-Item "$cached.download" $cached -force
-    } else { write-host "Loading $(url_remote_filename $url) from cache"}
+    } else { write-host "Loading $(url_remote_filename $url.address) from cache"}
 
     if (!($to -eq $null)) {
         Copy-Item $cached $to
@@ -132,7 +131,7 @@ function do_dl($url, $to, $cookies) {
     $progress = [console]::isoutputredirected -eq $false
 
     try {
-        $url = handle_special_urls $url
+        $url.address = handle_special_urls $url.address
         dl $url $to $cookies $progress
     } catch {
         $e = $_.exception
@@ -145,28 +144,20 @@ function do_dl($url, $to, $cookies) {
 
 # download with filesize and progress indicator
 function dl($url, $to, $cookies, $progress) {
-    $wreq = [net.webrequest]::create($url)
-    if($wreq -is [net.httpwebrequest]) {
-        $wreq.useragent = 'Scoop/1.0'
-        $wreq.referer = strip_filename $url
-        if($cookies) {
-            $wreq.headers.add('Cookie', (cookie_header $cookies))
-        }
-    }
-
+    $wreq = create_webrequest $url $cookies
     $wres = $wreq.getresponse()
     $total = $wres.ContentLength
     if($total -eq -1 -and $wreq -is [net.ftpwebrequest]) {
-        $total = ftp_file_size($url)
+        $total = ftp_file_size($url.address)
     }
 
     if ($progress -and ($total -gt 0)) {
         [console]::CursorVisible = $false
         function dl_onProgress($read) {
-            dl_progress $read $total $url
+            dl_progress $read $total $url.address
         }
     } else {
-        write-host "Downloading $url ($(filesize $total))..."
+        write-host "Downloading $url.address ($(filesize $total))..."
         function dl_onProgress {
             #no op
         }
@@ -271,7 +262,7 @@ function dl_urls($app, $version, $manifest, $architecture, $dir, $use_cache = $t
 
     # can be multiple urls: if there are, then msi or installer should go last,
     # so that $fname is set properly
-    $urls = @(url $manifest $architecture)
+    $urls = @(urls_with_request $manifest $architecture)
 
     # can be multiple cookies: they will be used for all HTTP requests.
     $cookies = $manifest.cookie
@@ -288,10 +279,10 @@ function dl_urls($app, $version, $manifest, $architecture, $dir, $use_cache = $t
 
     # download first
     foreach($url in $urls) {
-        $data.$url = @{
-            "fname" = url_filename $url
+        $data.$($url.address) = @{
+            "fname" = url_filename $url.address
         }
-        $fname = $data.$url.fname
+        $fname = $data.$($url.address).fname
 
         try {
             dl_with_cache $app $version $url "$dir\$fname" $cookies $use_cache
@@ -302,13 +293,13 @@ function dl_urls($app, $version, $manifest, $architecture, $dir, $use_cache = $t
     }
 
     foreach($url in $urls) {
-        $fname = $data.$url.fname
+        $fname = $data.$($url.address).fname
 
         if($check_hash) {
-            $ok, $err = check_hash "$dir\$fname" $url $manifest $architecture
+            $ok, $err = check_hash "$dir\$fname" $url.address $manifest $architecture
             if(!$ok) {
                 # rm cached
-                $cached = cache_path $app $version $url
+                $cached = cache_path $app $version $url.address
                 if(test-path $cached) { rm -force $cached }
                 abort $err
             }
@@ -414,9 +405,18 @@ function hash_for_url($manifest, $url, $arch) {
 
     if($hashes.length -eq 0) { return $null }
 
-    $urls = @(url $manifest $arch)
+    $urls = @(urls_with_request $manifest $arch)
 
-    $index = [array]::indexof($urls, $url)
+    $index = -1
+    $i = 0
+    foreach($url_with_request in $urls) {
+        if($url -eq $url_with_request.address) {
+            $index = $i
+            break
+        }
+        $i++
+    }
+
     if($index -eq -1) { abort "Couldn't find hash in manifest for '$url'." }
 
     @($hashes)[$index]

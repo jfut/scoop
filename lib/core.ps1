@@ -141,6 +141,90 @@ function is_local($path) {
     ($path -notmatch '^https?://') -and (test-path $path)
 }
 
+# url request
+function url_with_request($url, $default_request) {
+    if($url -is [String]) {
+        $url = [PSCustomObject]@{
+            "address" = $url;
+            "request" = $default_request;
+        }
+    }
+    return $url
+}
+
+function urls_with_request($manifest, $architecture) {
+    $urls = @(url $manifest $architecture)
+
+    $urls_with_request = @()
+    foreach($url in $urls) {
+        $urls_with_request += url_with_request $url $manifest.request
+    }
+    return $urls_with_request
+}
+
+function create_webclient($url) {
+    $wc = new-object net.webclient
+    $wc.headers.add('User-Agent', 'Scoop/1.0 (+http://scoop.sh/) (Windows NT 6.1; WOW64)')
+    $wc.headers.add('Referer', (strip_filename $url.address))
+    if($url.request.cookie) {
+        $wc.headers.add('Cookie', (cookie_header $url.request.cookie))
+    }
+    if($url.request.crediential) {
+        # expand env variables, e.g. "$Env:USERNAME" and "$Env:PASSWORD"
+        $username = $executionContext.invokeCommand.expandString($url.request.crediential.username)
+        $password = $executionContext.invokeCommand.expandString($url.request.crediential.password)
+        $wc.credentials = new-object System.Net.NetworkCredential($username, $password)
+    }
+    if($url.request.header) {
+        $url.request.header.psobject.properties | % {
+            $wc.headers.add($_.name, $_.value)
+        }
+    }
+    # allow empty value
+    if($null -ne $url.request.referer) {
+        $wc.headers.add('Referer', $url.request.referer)
+    }
+    if($null -ne $url.request.useragent) {
+        $wc.headers.add('User-Agent', $url.request.useragent)
+    }
+    return $wc
+}
+
+function create_webrequest($url, $cookies) {
+    $wreq = [net.webrequest]::create($url.address)
+    if($wreq -is [net.httpwebrequest]) {
+        $wreq.useragent = 'Scoop/1.0'
+        $wreq.referer = strip_filename $url.address
+        # compatible with a previously version, e.g. oraclejdk
+        if($cookies -and !$url.request.cookie) {
+            $wreq.headers.add('Cookie', (cookie_header $cookies))
+        }
+
+        if($url.request.cookie) {
+            $wreq.headers.add('Cookie', (cookie_header $url.request.cookie))
+        }
+        if($url.request.crediential) {
+            # expand env variables, e.g. "$Env:USERNAME" and "$Env:PASSWORD"
+            $username = $executionContext.invokeCommand.expandString($url.request.crediential.username)
+            $password = $executionContext.invokeCommand.expandString($url.request.crediential.password)
+            $wreq.credentials = new-object System.Net.NetworkCredential($username, $password)
+        }
+        if($url.request.header) {
+            $url.request.header.psobject.properties | % {
+                $wreq.headers.add($_.name, $_.value)
+            }
+        }
+        # allow empty value
+        if($null -ne $url.request.referer) {
+            $wreq.referer = $url.request.referer
+        }
+        if($null -ne $url.request.useragent) {
+            $wreq.useragent = $url.request.useragent
+        }
+    }
+    return $wreq
+}
+
 # operations
 function dl($url,$to) {
     $wc = new-object system.net.webClient
